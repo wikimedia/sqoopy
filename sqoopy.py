@@ -38,6 +38,7 @@ import subprocess
 import re
 import sys
 import logging
+import math
 
 from docopt import docopt
 from collections import OrderedDict
@@ -64,10 +65,13 @@ class Column(object):
 
 class Mapping(object):
 	def __init__(self):
-		self.map = {}
-		self.map['varbinary'] = 'char'
-		self.map['binary'] = 'char'
-		self.map['blob'] = 'char'
+		self.datatype = {}
+		self.datatype['varbinary'] = 'char'
+		self.datatype['binary'] = 'char'
+		self.datatype['blob'] = 'char'
+		
+		self.size = {}
+		self.size['timestamp'] = 19
 
 class Db(object):
 	def __init__(self, user, password, host, database, table, sqoop_options):
@@ -78,6 +82,8 @@ class Db(object):
 		self.tables = [table]
 		self.sqoop_options = sqoop_options if sqoop_options != None else ''
 		self.data = None
+		self.row_count = 0
+		self.blocksize = (1024 ** 3) * 256
 		self.schema = OrderedDict()
 		self.verbose = True
 		self.mysql_cmd = ['mysql', '-h', self.host, '-u%s' % self.user, '-p%s' % self.password, self.database]
@@ -104,6 +110,10 @@ class Db(object):
 		stdoutdata = stdoutdata.split('\n')
 		return stdoutdata[1:-1]
 	
+	def get_row_count(self, table):
+		query = "SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA ='%s' AND TABLE_NAME ='%s';" % (self.database, table)
+		self.row_count = float(self.launch(query)[0])
+
 	def get_tables(self):
 		self.tables = []
 		tables = self.launch('SHOW TABLES')
@@ -116,6 +126,7 @@ class Db(object):
 		self.data = self.launch('DESCRIBE %s' % table)
 	
 	def create_schema(self, table):
+		mapping = Mapping()
 		for data in self.data:
 			data = data.split('\t')
 			name = data[0]
@@ -124,7 +135,7 @@ class Db(object):
 				size = int(size[:-1])
 			except ValueError:
 				datatype = data[1]
-				size = None
+				size = mapping.size.get(name) if name in mapping.size else 0
 			pk = True if data[3] == 'PRI' or data[3] == 'MUL' else False
 			datatype = datatype.lower()
 			if self.verbose:
@@ -136,14 +147,18 @@ class Db(object):
 		query = ''
 		mapping = Mapping()
 		for name, column in self.schema.iteritems():
-			if column.datatype in mapping.map:
-				part = 'CAST(%s AS %s) AS %s' % (name, mapping.map.get(column.datatype), name)
+			if column.datatype in mapping.datatype:
+				part = 'CAST(%s AS %s) AS %s' % (name, mapping.datatype.get(column.datatype), name)
 			else:
 				part = name
 			query = ', '.join([query, part])
 		return query[1:]
-		
-		
+	
+	def number_of_mappers(self, table):
+		self.get_row_count(table)
+		row_size = sum([column.size for column in self.schema.itervalues()]) + len(self.schema.keys())
+		return math.ceil((self.row_count * row_size) / self.blocksize)
+
 	def generate_query(self, query_type, query, table):
 		'''
 		About importance of $CONDITIONS, see:
@@ -156,7 +171,7 @@ class Db(object):
 			--query 'SELECT rc_id,CAST(column AS char(255) CHARACTER SET utf8) AS column FROM table_name WHERE $CONDITIONS'
 		'''
 		if query_type == 'select':			
-			query = 'SELECT %s FROM %s WHERE \$CONDITIONS' % (query, table)
+			query = 'SELECT %s FROM %s WHERE $CONDITIONS' % (query, table)
 			if self.verbose:
 				log.info('Constructed query: %s' % query)
 		else:
@@ -166,7 +181,7 @@ class Db(object):
 	
 	def generate_sqoop_cmd(self, query, table):
 		pk = self.get_pk(table)
-		split_by = '--split_by %s' % pk
+		split_by = '--split-by %s' % pk
 		query = "--query '%s'" % query
 		sqoop_cmd = ' '.join([self.sqoop_cmd, split_by, query])
 		if self.verbose:
@@ -191,6 +206,7 @@ def main(args):
 		database.create_schema(table)
 		query = database.cast_columns()
 		query = database.generate_query('select', query, table)
+		mappers = database.number_of_mappers(table)
 		sqoop_cmd = database.generate_sqoop_cmd(query, table)
 		fh.write(sqoop_cmd)
 		fh.write('\n\n')
