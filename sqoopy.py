@@ -83,7 +83,7 @@ class Db(object):
 		self.sqoop_options = sqoop_options if sqoop_options != None else ''
 		self.data = None
 		self.row_count = 0
-		self.blocksize = (1024 ** 3) * 256
+		self.blocksize = (1024 ** 3) * 256  # Hardcoded default for now
 		self.schema = OrderedDict()
 		self.verbose = True
 		self.mysql_cmd = ['mysql', '-h', self.host, '-u%s' % self.user, '-p%s' % self.password, self.database]
@@ -178,16 +178,15 @@ class Db(object):
 			raise Exception('Query type %s not yet supported' % query_type)
 		return query
 	
-	
-	def generate_sqoop_cmd(self, query, table):
+	def generate_sqoop_cmd(self, mappers, query, table):
 		pk = self.get_pk(table)
 		split_by = '--split-by %s' % pk
 		query = "--query '%s'" % query
-		sqoop_cmd = ' '.join([self.sqoop_cmd, split_by, query])
+		mappers = '--num-mappers %s' % mappers
+		sqoop_cmd = ' '.join([self.sqoop_cmd, split_by, mappers, query])
 		if self.verbose:
 			log.info('Generated sqoop command: %s' % sqoop_cmd)
 		return sqoop_cmd
-
 
 def main(args):
 	'''
@@ -207,7 +206,7 @@ def main(args):
 		query = database.cast_columns()
 		query = database.generate_query('select', query, table)
 		mappers = database.number_of_mappers(table)
-		sqoop_cmd = database.generate_sqoop_cmd(query, table)
+		sqoop_cmd = database.generate_sqoop_cmd(mappers, query, table)
 		fh.write(sqoop_cmd)
 		fh.write('\n\n')
 	fh.close()
