@@ -51,7 +51,7 @@ ch.setLevel(logging.DEBUG)
 ch.setFormatter(formatter)
 log.addHandler(ch)
 
-column_size = re.compile('\d{1,5}')
+column_size = re.compile('\(\d{1,5}\)')
 
 class Column(object):
 	def __init__(self, name, datatype, size, pk):
@@ -130,16 +130,20 @@ class Db(object):
 		for data in self.data:
 			data = data.split('\t')
 			name = data[0]
-			try:
-				datatype, size = data[1].split('(')
-				size = int(size[:-1])
-			except ValueError:
-				datatype = data[1]
-				size = mapping.size.get(name) if name in mapping.size else 0
-			pk = True if data[3] == 'PRI' or data[3] == 'MUL' else False
+			datatype = re.split(column_size, data[1])[0]
 			datatype = datatype.lower()
+			
+			size = re.findall(column_size, data[1])
+			if len(size) > 0:
+				size = int(size[0][1:-1])
+			else:
+				size = mapping.size.get(datatype, 0)
+			
+			pk = True if data[3] == 'PRI' or data[3] == 'MUL' else False
+			
 			if self.verbose:
 				log.info('Table: %s, found column: %s (%s)' % (table, name, datatype))
+
 			column = Column(name, datatype, size, pk)
 			self.schema.setdefault(name, column)
 	
@@ -148,7 +152,7 @@ class Db(object):
 		mapping = Mapping()
 		for name, column in self.schema.iteritems():
 			if column.datatype in mapping.datatype:
-				part = 'CAST(%s AS %s) AS %s' % (name, mapping.datatype.get(column.datatype), name)
+				part = 'CAST(%s AS %s CHARACTER SET utf8) AS %s' % (name, mapping.datatype.get(column.datatype), name)
 			else:
 				part = name
 			query = ', '.join([query, part])
