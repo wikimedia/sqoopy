@@ -74,19 +74,19 @@ class Mapping(object):
 		self.size['timestamp'] = 19
 
 class Db(object):
-	def __init__(self, user, password, host, database, table, sqoop_options):
+	def __init__(self, user, password, host, database, table=None, sqoop_options=None):
 		self.user = user
 		self.password = password
 		self.host = host
 		self.database = database
-		self.tables = [table]
+		self.tables = [table] if table else [] 
 		self.sqoop_options = sqoop_options if sqoop_options != None else ''
 		self.data = None
 		self.row_count = 0
 		self.blocksize = (1024 ** 3) * 256  # Hardcoded default for now
 		self.schema = OrderedDict()
 		self.verbose = True
-		self.mysql_cmd = ['mysql', '-h', self.host, '-u%s' % self.user, '-p%s' % self.password, self.database]
+		self.mysql_cmd = ['/usr/local/bin/mysql', '-h', self.host, '-u%s' % self.user, '-p%s' % self.password, self.database]
 		self.sqoop_cmd = 'sqoop import --username %s --password %s --connect jdbc:mysql://%s:3306/%s %s' % (self.user, self.password, self.host, self.database, self.sqoop_options)
 
 	def __str__(self):
