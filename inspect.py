@@ -70,13 +70,21 @@ class Field(object):
         except IndexError:
             return key
 
-def make_C(parent):
-    class C(parent):
-        def add(self):
-            print ''
-    return C
+class Collection:
+    def __init__(self, itemType):
+        self.itemType = itemType
+        # you can create whatever crazy indexed object store you want here
+        self.items = []
+
+    def add(self, item):
+        # you can enforce that item is the same as itemType here if you want
+        self.items.append(item)
+
+    def where(self, fn):
+        return [x for x in self.items if fn(x)]
 
 def inspect_table(database, table):
+    fields = Collection(Field)
     for data in database.data:
         data = data.split('\t')
         print data
@@ -91,9 +99,10 @@ def inspect_table(database, table):
             size = 0
             
         pk = True if data[3] == 'PRI' or data[3] == 'MUL' else False
-        fields = make_C(Field(key, datatype, pk, size))
-        print fields
-    return fields  
+        fields.add(Field(key, datatype, pk, size))
+    
+    print 'these are part of the pk: ' + [field.key for field in fields.where(lambda x: x.pk)]
+    return fields
 #        if self.verbose:
 #            log.info('Table: %s, found column: %s (%s)' % (table, name, datatype))
 
