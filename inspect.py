@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 '''
 Usage: inspect.py [--user=user] [--password=password] [--host=host] 
-[--database=database]  
+[--database=database] [--tables=tables]
 
 Arguments:
     user            the MySQL username
     host            the host name of the MySQL database
     database        name of the database
     password        password belonging to user
+    tables          comma separated list of tables that need to be inspected
     
 '''
 
@@ -51,7 +52,7 @@ class Field(object):
         self.mysql_size = size            
         self.hive_datatype = self.get_hive_datatype()
         self.table = table
-        self.native_conversion = False
+        self.native_conversion = converter.supports(self.mysql_datatype)
     
     def __str__(self):
         return '%s <%s(%s)>' % (self.canonical_key, self.mysql_datatype, self.mysql_size)
@@ -118,7 +119,7 @@ def write_output(fields):
     canonical_key, key, datatype, mysql_table, hive_datatype 
     '''
     rows = []
-    table = Texttable(max_width=0)
+    table = Texttable(max_width=140)
     hivedatatypes = Datatype()
     rows.append(['canonical_column', 'column', 'mysql_table', 'mysql_datatype', 'suggested hive_datatype', 'requires feedback'])
     for field in fields:
@@ -135,6 +136,8 @@ def main(args):
                 args.get('--database'))
     if not args.get('--table'):
         database.get_tables()
+    else:
+        database.tables = args.get('--tables').split(',')
     
     fields = Collection(Field)
 

@@ -73,6 +73,8 @@ class Datatype(object):
 		self.mysql_to_mysql['varbinary'] = 'char'
 		self.mysql_to_mysql['binary'] = 'char'
 		self.mysql_to_mysql['blob'] = 'char'
+		self.mysql_to_mysql['tinyblob'] = 'char'
+		self.mysql_to_mysql['mediumblob'] = 'char'
 		'''
 		Mysql to Hive Casting
 		'''
@@ -83,6 +85,10 @@ class Datatype(object):
 		self.mysql_to_hive['timestamp'] = 'timestamp'
 		self.mysql_to_hive['varchar'] = 'string'
 		self.mysql_to_hive['char'] = 'string'
+		self.mysql_to_hive['tinyint'] = 'smallint'
+		self.mysql_to_hive['mediumblob'] = 'string'
+		self.mysql_to_hive['enum'] = 'array'
+		
 		
 		self.size = {}
 		self.size['timestamp'] = 19
@@ -90,12 +96,20 @@ class Datatype(object):
 	def supports(self, mysql_datatype):
 		return True if mysql_datatype in self.hive_types else False
 	
+	def requires_mysql_cast(self, mysql_datatype):
+		if mysql_datatype in self.mysql_to_mysql.keys():
+			return True
+		else:
+			return False
+	
 	def convert(self, mysql_datatype, destination):
 		if destination == 'hive':
 			if self.supports(mysql_datatype):
 				return mysql_datatype
 			else:
-				return self.mysql_to_hive.get(mysql_datatype)
+				if self.requires_mysql_cast(mysql_datatype):
+					mysql_datatype = self.mysql_to_mysql.get(mysql_datatype)
+				return self.mysql_to_hive.get(mysql_datatype, '%s has not yet a hive mapping ' % mysql_datatype)
 		elif destination == 'mysql':
 			return self.mysql_to_mysql.get(mysql_datatype)
 		else:
