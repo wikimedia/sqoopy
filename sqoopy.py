@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 '''
 Usage: sqoopy.py [--user=user] [--password=password] [--host=host] 
-[--database=database] [--table=table] [--sqoop_options=sqoop_options] 
+[--database=database] [--tables=tables] [--sqoop_options=sqoop_options] 
 
 Arguments:
 	user			the MySQL username
+	password		password belonging to user
 	host			the host name of the MySQL database
 	database		name of the database
-	table			name of the table
-	password		password belonging to user
+	tables			comma separated list of tables that need to be inspected
 	sqoop_options	Append verbatim sqoop command line options
 	
 
@@ -169,7 +169,7 @@ class Db(object):
 		self.data = self.launch('DESCRIBE %s' % table)
 	
 	def create_schema(self, table):
-		mapping = Mapping()
+		mapping = Datatype()
 		for data in self.data:
 			data = data.split('\t')
 			name = data[0]
@@ -192,10 +192,10 @@ class Db(object):
 	
 	def cast_columns(self):
 		query = ''
-		mapping = Datatype()
+		converter = Datatype()
 		for name, column in self.schema.iteritems():
-			if column.datatype in mapping.mysql:
-				part = 'CAST(%s AS %s CHARACTER SET utf8) AS %s' % (name, mapping.datatype.get(column.datatype), name)
+			if converter.requires_mysql_cast(column.datatype):
+				part = 'CAST(%s AS %s CHARACTER SET utf8) AS %s' % (name, converter.mysql_to_mysql.get(column.datatype), name)
 			else:
 				part = name
 			query = ', '.join([query, part])
@@ -234,7 +234,8 @@ class Db(object):
 		split_by = '--split-by %s' % pk
 		query = "--query '%s'" % query
 		mappers = '--num-mappers %s' % mappers
-		sqoop_cmd = ' '.join([self.sqoop_cmd, split_by, mappers, query])
+		target_dir = '--target-dir /tmp/' 
+		sqoop_cmd = ' '.join([self.sqoop_cmd, split_by, mappers, target_dir, query])
 		if self.verbose:
 			log.info('Generated sqoop command: %s' % sqoop_cmd)
 		return sqoop_cmd

@@ -121,12 +121,12 @@ def write_output(fields):
     rows = []
     table = Texttable(max_width=140)
     hivedatatypes = Datatype()
-    rows.append(['canonical_column', 'column', 'mysql_table', 'mysql_datatype', 'suggested hive_datatype', 'requires feedback'])
+    rows.append(['canonical_column', 'column', 'mysql_table', 'mysql_datatype', 'hive_datatype', 'native mapping', 'requires feedback'])
     for field in fields:
-        if not hivedatatypes.supports(field.mysql_datatype):
-            feedback = True if field.mysql_datatype != field.hive_datatype else ''
-            row = ['%s' % field.canonical_key, '%s' % field.key, '%s' % field.table, '%s' % field.mysql_datatype, '%s' % field.hive_datatype, '%s' % feedback]
-            rows.append(row)
+        # if not hivedatatypes.supports(field.mysql_datatype):
+        feedback = True if field.mysql_datatype != field.hive_datatype else ''
+        row = ['%s' % field.canonical_key, '%s' % field.key, '%s' % field.table, '%s' % field.mysql_datatype, '%s' % field.hive_datatype, '%s' % field.native_conversion, '%s' % feedback]
+        rows.append(row)
     table.add_rows(rows)
     print table.draw()
 
