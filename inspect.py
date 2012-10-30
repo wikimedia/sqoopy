@@ -132,12 +132,15 @@ def write_output(fields):
 
 
 def main(args):
+    try:
+        tables = args.get('--tables').split(',')
+    except AttributeError:
+        tables = []
     database = Db(args.get('--user'), args.get('--password'), args.get('--host'),
-                args.get('--database'))
-    if not args.get('--table'):
+                args.get('--database'), tables)
+    
+    if not args.get('--tables'):
         database.get_tables()
-    else:
-        database.tables = args.get('--tables').split(',')
     
     fields = Collection(Field)
 

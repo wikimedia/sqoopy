@@ -117,12 +117,12 @@ class Datatype(object):
 			sys.exit(-1)
 
 class Db(object):
-	def __init__(self, user, password, host, database, table=None, sqoop_options=None):
+	def __init__(self, user, password, host, database, tables=None, sqoop_options=None):
 		self.user = user
 		self.password = password
 		self.host = host
 		self.database = database
-		self.tables = [table] if table else [] 
+		self.tables = tables if tables else [] 
 		self.sqoop_options = sqoop_options if sqoop_options != None else ''
 		self.data = None
 		self.row_count = 0
@@ -192,7 +192,7 @@ class Db(object):
 	
 	def cast_columns(self):
 		query = ''
-		mapping = Mapping()
+		mapping = Datatype()
 		for name, column in self.schema.iteritems():
 			if column.datatype in mapping.mysql:
 				part = 'CAST(%s AS %s CHARACTER SET utf8) AS %s' % (name, mapping.datatype.get(column.datatype), name)
@@ -248,6 +248,8 @@ def main(args):
 				args.get('--database'), args.get('--table'), args.get('--target_dir'))
 	if not args.get('--table'):
 		database.get_tables()
+	else:
+		database.tables = args.get('--tables').split(',')
 		
 	fh = open('sqoop.sh', 'w')
 	log.info('Opening file handle...')
