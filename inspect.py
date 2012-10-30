@@ -38,9 +38,9 @@ from docopt import docopt
 
 from sqoopy import Db
 from sqoopy import column_size
-from sqoopy import Mapping
+from sqoopy import Datatype
 
-converter = Mapping()
+converter = Datatype()
 
 class Field(object):
     def __init__(self, key, datatype, pk, table, size=0):
@@ -51,21 +51,24 @@ class Field(object):
         self.mysql_size = size            
         self.hive_datatype = self.get_hive_datatype()
         self.table = table
+        self.native_conversion = False
     
     def __str__(self):
         return '%s <%s(%s)>' % (self.canonical_key, self.mysql_datatype, self.mysql_size)
     
     def get_hive_datatype(self):
         if self.canonical_key.find('timestamp') > -1:
-            return converter.hive.get('timestamp')
+            return converter.convert('timestamp', 'hive')
         else:
-            return converter.hive.get(self.mysql_datatype, self.mysql_datatype)
+            return converter.convert(self.mysql_datatype, 'hive')
     
     def get_canonical_key(self, key):
-        try:
-            return key.split('_')[1].lower()
-        except IndexError:
-            return key.lower()
+        key = key.lower().split('_')
+        if len(key) > 1:
+            key = key[1:]
+        return '_'.join(key)
+        # except IndexError:
+        #    return key.lower()
 
 class Collection:
     def __init__(self, itemType):
@@ -77,9 +80,7 @@ class Collection:
         unique_keys = set([field.canonical_key for field in self.items]) 
         for unique in unique_keys:
             fields = [field for field in self.where(lambda x: x.canonical_key == unique)]
-            # tables = [field.tables for field in fields]
             for field in fields:
-                # field.tables = tables
                 yield field 
     
     def add(self, item):
@@ -117,12 +118,14 @@ def write_output(fields):
     canonical_key, key, datatype, mysql_table, hive_datatype 
     '''
     rows = []
-    table = Texttable()
-    rows.append(['canonical_column', 'column', 'mysql_table', 'mysql_datatype', 'hive_datatype', 'requires feedback'])
+    table = Texttable(max_width=0)
+    hivedatatypes = Datatype()
+    rows.append(['canonical_column', 'column', 'mysql_table', 'mysql_datatype', 'suggested hive_datatype', 'requires feedback'])
     for field in fields:
-        feedback = True if field.mysql_datatype != field.hive_datatype else ''
-        row = ['%s' % field.canonical_key, '%s' % field.key, '%s' % field.table, '%s' % field.mysql_datatype, '%s' % field.hive_datatype, '%s' % feedback]
-        rows.append(row)
+        if not hivedatatypes.supports(field.mysql_datatype):
+            feedback = True if field.mysql_datatype != field.hive_datatype else ''
+            row = ['%s' % field.canonical_key, '%s' % field.key, '%s' % field.table, '%s' % field.mysql_datatype, '%s' % field.hive_datatype, '%s' % feedback]
+            rows.append(row)
     table.add_rows(rows)
     print table.draw()
 

@@ -63,26 +63,44 @@ class Column(object):
 	def __str__(self):
 		return '%s (%s)' % (self.name, self.datatype)
 
-class Mapping(object):
+class Datatype(object):
 	def __init__(self):
+		self.hive_types = set(['smallint', 'int', 'bigint', 'boolean', 'float', 'double', 'string', 'binary', 'timestamp']) 
 		'''
 		Mysql to Mysql Casting
 		'''
-		self.mysql = {}
-		self.mysql['varbinary'] = 'char'
-		self.mysql['binary'] = 'char'
-		self.mysql['blob'] = 'char'
+		self.mysql_to_mysql = {}
+		self.mysql_to_mysql['varbinary'] = 'char'
+		self.mysql_to_mysql['binary'] = 'char'
+		self.mysql_to_mysql['blob'] = 'char'
 		'''
 		Mysql to Hive Casting
 		'''
-		self.hive = {}
-		self.hive['varbinary'] = 'string'
-		self.hive['binary'] = 'string'
-		self.hive['blob'] = 'string'
-		self.hive['timestamp'] = 'timestamp'
+		self.mysql_to_hive = {}
+		self.mysql_to_hive['varbinary'] = 'string'
+		self.mysql_to_hive['binary'] = 'string'
+		self.mysql_to_hive['blob'] = 'string'
+		self.mysql_to_hive['timestamp'] = 'timestamp'
+		self.mysql_to_hive['varchar'] = 'string'
+		self.mysql_to_hive['char'] = 'string'
 		
 		self.size = {}
 		self.size['timestamp'] = 19
+		
+	def supports(self, mysql_datatype):
+		return True if mysql_datatype in self.hive_types else False
+	
+	def convert(self, mysql_datatype, destination):
+		if destination == 'hive':
+			if self.supports(mysql_datatype):
+				return mysql_datatype
+			else:
+				return self.mysql_to_hive.get(mysql_datatype)
+		elif destination == 'mysql':
+			return self.mysql_to_mysql.get(mysql_datatype)
+		else:
+			raise Exception('Destination %s is not supported' % destination)
+			sys.exit(-1)
 
 class Db(object):
 	def __init__(self, user, password, host, database, table=None, sqoop_options=None):
@@ -97,7 +115,7 @@ class Db(object):
 		self.blocksize = (1024 ** 3) * 256  # Hardcoded default for now
 		self.schema = OrderedDict()
 		self.verbose = True
-		self.mysql_cmd = ['/usr/local/bin/mysql', '-h', self.host, '-u%s' % self.user, '-p%s' % self.password, self.database]
+		self.mysql_cmd = ['mysql', '-h', self.host, '-u%s' % self.user, '-p%s' % self.password, self.database]
 		self.sqoop_cmd = 'sqoop import --username %s --password %s --connect jdbc:mysql://%s:3306/%s %s' % (self.user, self.password, self.host, self.database, self.sqoop_options)
 
 	def __str__(self):
@@ -172,7 +190,11 @@ class Db(object):
 	def number_of_mappers(self, table):
 		self.get_row_count(table)
 		row_size = sum([column.size for column in self.schema.itervalues()]) + len(self.schema.keys())
-		return math.ceil((self.row_count * row_size) / self.blocksize)
+		num_mappers = int(math.ceil((self.row_count * row_size) / self.blocksize))
+		if num_mappers < 5:
+			return 4
+		else:
+			return num_mappers
 
 	def generate_query(self, query_type, query, table):
 		'''
