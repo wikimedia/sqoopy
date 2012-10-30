@@ -31,44 +31,41 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 """
+
 import re
+from texttable import Texttable
 from docopt import docopt
 
 from sqoopy import Db
 from sqoopy import column_size
+from sqoopy import Mapping
 
-class Fields(object): 
-    def __init__(self):
-        self._coll = {}
-    
-    def add(self, field):
-        self._coll[field.name] = field
-        
-    def get(self, name, **kwargs):
-        try:
-            return self._coll.get(name)
-        except KeyError:
-            field = Field(**kwargs)
-            self.add(field)
-            return field
+converter = Mapping()
 
 class Field(object):
-    def __init__(self, key, datatype, pk, size=0):
+    def __init__(self, key, datatype, pk, table, size=0):
+        self.key = key
         self.canonical_key = self.get_canonical_key(key)
         self.mysql_datatype = datatype
         self.pk = pk
         self.mysql_size = size            
-        self.hive_datatype = None
-        self.tables = set()
+        self.hive_datatype = self.get_hive_datatype()
+        self.table = table
     
     def __str__(self):
         return '%s <%s(%s)>' % (self.canonical_key, self.mysql_datatype, self.mysql_size)
     
+    def get_hive_datatype(self):
+        if self.canonical_key.find('timestamp') > -1:
+            return converter.hive.get('timestamp')
+        else:
+            return converter.hive.get(self.mysql_datatype, self.mysql_datatype)
+    
     def get_canonical_key(self, key):
         try:
-            return key.split('_')[1]
+            return key.split('_')[1].lower()
         except IndexError:
-            return key
+            return key.lower()
 
 class Collection:
     def __init__(self, itemType):
@@ -76,6 +73,15 @@ class Collection:
         # you can create whatever crazy indexed object store you want here
         self.items = []
 
+    def __iter__(self):
+        unique_keys = set([field.canonical_key for field in self.items]) 
+        for unique in unique_keys:
+            fields = [field for field in self.where(lambda x: x.canonical_key == unique)]
+            # tables = [field.tables for field in fields]
+            for field in fields:
+                # field.tables = tables
+                yield field 
+    
     def add(self, item):
         # you can enforce that item is the same as itemType here if you want
         self.items.append(item)
@@ -83,11 +89,10 @@ class Collection:
     def where(self, fn):
         return [x for x in self.items if fn(x)]
 
-def inspect_table(database, table):
-    fields = Collection(Field)
+    
+def inspect_table(database, table, fields):
     for data in database.data:
         data = data.split('\t')
-        print data
         key = data[0]
         datatype = re.split(column_size, data[1])[0]
         datatype = datatype.lower()
@@ -99,15 +104,28 @@ def inspect_table(database, table):
             size = 0
             
         pk = True if data[3] == 'PRI' or data[3] == 'MUL' else False
-        fields.add(Field(key, datatype, pk, size))
+        fields.add(Field(key, datatype, pk, table, size))
     
-    print 'these are part of the pk: ' + [field.key for field in fields.where(lambda x: x.pk)]
+    # print 'these are part of the pk: ' + ' '.join([field.key for field in fields.where(lambda x: x.pk)])
     return fields
 #        if self.verbose:
 #            log.info('Table: %s, found column: %s (%s)' % (table, name, datatype))
 
-        # column = Column(name, datatype, size, pk)
-        # self.schema.setdefault(name, column)
+def write_output(fields):
+    '''
+    Desired output
+    canonical_key, key, datatype, mysql_table, hive_datatype 
+    '''
+    rows = []
+    table = Texttable()
+    rows.append(['canonical_column', 'column', 'mysql_table', 'mysql_datatype', 'hive_datatype', 'requires feedback'])
+    for field in fields:
+        feedback = True if field.mysql_datatype != field.hive_datatype else ''
+        row = ['%s' % field.canonical_key, '%s' % field.key, '%s' % field.table, '%s' % field.mysql_datatype, '%s' % field.hive_datatype, '%s' % feedback]
+        rows.append(row)
+    table.add_rows(rows)
+    print table.draw()
+
 
 def main(args):
     database = Db(args.get('--user'), args.get('--password'), args.get('--host'),
@@ -115,9 +133,13 @@ def main(args):
     if not args.get('--table'):
         database.get_tables()
     
+    fields = Collection(Field)
+
     for table in database.tables:
         database.inspect(table)
-        fields = inspect_table(database, table)
+        fields = inspect_table(database, table, fields)
+    write_output(fields)
+        
         
 
 if __name__ == '__main__':

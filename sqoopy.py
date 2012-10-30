@@ -65,10 +65,21 @@ class Column(object):
 
 class Mapping(object):
 	def __init__(self):
-		self.datatype = {}
-		self.datatype['varbinary'] = 'char'
-		self.datatype['binary'] = 'char'
-		self.datatype['blob'] = 'char'
+		'''
+		Mysql to Mysql Casting
+		'''
+		self.mysql = {}
+		self.mysql['varbinary'] = 'char'
+		self.mysql['binary'] = 'char'
+		self.mysql['blob'] = 'char'
+		'''
+		Mysql to Hive Casting
+		'''
+		self.hive = {}
+		self.hive['varbinary'] = 'string'
+		self.hive['binary'] = 'string'
+		self.hive['blob'] = 'string'
+		self.hive['timestamp'] = 'timestamp'
 		
 		self.size = {}
 		self.size['timestamp'] = 19
@@ -151,7 +162,7 @@ class Db(object):
 		query = ''
 		mapping = Mapping()
 		for name, column in self.schema.iteritems():
-			if column.datatype in mapping.datatype:
+			if column.datatype in mapping.mysql:
 				part = 'CAST(%s AS %s CHARACTER SET utf8) AS %s' % (name, mapping.datatype.get(column.datatype), name)
 			else:
 				part = name
