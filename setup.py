@@ -26,10 +26,15 @@ setup(
     author_email     = 'dvanliere@wikimedia.org',
     
     packages         = find_packages(),
-    entry_points     = { 'console_scripts':['sqoopy = sqoopy:main'] },
+    entry_points     = { 
+        'console_scripts':[
+            'sqoopy = sqoopy.generate:main',
+            'sqoopy_inspect = sqoopy.inspect:main',
+        ]
+    },
     
     install_requires = [
-        'doctopt',
+        'docopt',
         'texttable',
     ],
     
@@ -47,5 +52,5 @@ setup(
         "License :: OSI Approved :: MIT License",
     ],
     zip_safe = False,
-    license  = "MIT",
+    license  = "GPLv2",
 )

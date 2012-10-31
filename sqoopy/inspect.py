@@ -38,9 +38,9 @@ import re
 from texttable import Texttable
 from docopt import docopt
 
-from sqoopy import Db
-from sqoopy import column_size
-from sqoopy import Datatype
+from generate import Db
+from generate import column_size
+from generate import Datatype
 
 
 converter = Datatype()
@@ -133,7 +133,7 @@ def write_output(fields):
     print table.draw()
 
 
-def main(args):
+def run(args):
     try:
         tables = args.get('--tables').split(',')
     except AttributeError:
@@ -151,6 +151,11 @@ def main(args):
         fields = inspect_table(database, table, fields)
     write_output(fields)
 
-if __name__ == '__main__':
+def main():
+    'Main script entrypoint for CLI.'
     args = docopt(__doc__)
     main(args)
+
+
+if __name__ == '__main__':
+    main()
