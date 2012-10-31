@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
-Usage: inspect.py [--user=user] [--password=password] [--host=host] 
+Usage: inspect.py [--user=user] [--password=password] [--host=host]
 [--database=database] [--tables=tables]
 
 Arguments:
@@ -16,6 +16,7 @@ Arguments:
 
 """
 sqoopy: Generate sqoop custom import statements
+
 Copyright (C) 2012  Diederik van Liere, Wikimedia Foundation
 
 This program is free software; you can redistribute it and/or
@@ -41,6 +42,7 @@ from sqoopy import Db
 from sqoopy import column_size
 from sqoopy import Datatype
 
+
 converter = Datatype()
 
 class Field(object):
@@ -49,7 +51,7 @@ class Field(object):
         self.canonical_key = self.get_canonical_key(key)
         self.mysql_datatype = datatype
         self.pk = pk
-        self.mysql_size = size            
+        self.mysql_size = size
         self.hive_datatype = self.get_hive_datatype()
         self.table = table
         self.native_conversion = converter.supports(self.mysql_datatype)
@@ -76,35 +78,35 @@ class Collection:
         self.itemType = itemType
         # you can create whatever crazy indexed object store you want here
         self.items = []
-
+    
     def __iter__(self):
-        unique_keys = set([field.canonical_key for field in self.items]) 
+        unique_keys = set([field.canonical_key for field in self.items])
         for unique in unique_keys:
             fields = [field for field in self.where(lambda x: x.canonical_key == unique)]
             for field in fields:
-                yield field 
+                yield field
     
     def add(self, item):
         # you can enforce that item is the same as itemType here if you want
         self.items.append(item)
-
+    
     def where(self, fn):
         return [x for x in self.items if fn(x)]
 
-    
+
 def inspect_table(database, table, fields):
     for data in database.data:
         data = data.split('\t')
         key = data[0]
         datatype = re.split(column_size, data[1])[0]
         datatype = datatype.lower()
-            
+        
         size = re.findall(column_size, data[1])
         if len(size) > 0:
             size = int(size[0][1:-1])
         else:
             size = 0
-            
+        
         pk = True if data[3] == 'PRI' or data[3] == 'MUL' else False
         fields.add(Field(key, datatype, pk, table, size))
     
@@ -116,7 +118,7 @@ def inspect_table(database, table, fields):
 def write_output(fields):
     '''
     Desired output
-    canonical_key, key, datatype, mysql_table, hive_datatype 
+    canonical_key, key, datatype, mysql_table, hive_datatype
     '''
     rows = []
     table = Texttable(max_width=140)
@@ -143,13 +145,11 @@ def main(args):
         database.get_tables()
     
     fields = Collection(Field)
-
+    
     for table in database.tables:
         database.inspect(table)
         fields = inspect_table(database, table, fields)
     write_output(fields)
-        
-        
 
 if __name__ == '__main__':
     args = docopt(__doc__)
