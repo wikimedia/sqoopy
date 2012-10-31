@@ -4,6 +4,8 @@
 Usage: sqoopy.py [--user=user] [--password=password] [--host=host] 
 [--database=database] [--tables=tables] [--sqoop_options=sqoop_options] 
 
+sqoopy: Generate sqoop custom import statements
+
 Arguments:
 	user			the MySQL username
 	password		password belonging to user
