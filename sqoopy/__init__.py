@@ -242,7 +242,7 @@ class Db(object):
 			log.info('Generated sqoop command: %s' % sqoop_cmd)
 		return sqoop_cmd
 
-def main(args):
+def run(args):
 	'''
 	Given a mysql database name and an optional table, construct a select query 
 	that takes care of casting (var)binary and blob fields to char fields.
@@ -268,7 +268,12 @@ def main(args):
 	fh.close()
 	log.info('Closing filehandle.')
 	log.info('Exit successfully')
-	
-if __name__ == '__main__':
+
+def main():
+	'Main script entrypoint for CLI.'
 	args = docopt(__doc__)
 	main(args)
+
+
+if __name__ == '__main__':
+	main()
