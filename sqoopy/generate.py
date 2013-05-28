@@ -1,19 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
-Usage: sqoopy.py [--user=user] [--password=password] [--host=host] 
-[--database=database] [--tables=tables] [--sqoop_options=sqoop_options] 
+Usage: generate.py <user> <password> <host> <database> [--port=port]
+[--tables=tables] [--sqoop_options=sqoop_options] [--oozie] 
 
 sqoopy: Generate sqoop custom import statements
 
 Arguments:
-	user			the MySQL username
-	password		password belonging to user
-	host			the host name of the MySQL database
-	database		name of the database
-	tables			comma separated list of tables that need to be inspected
+	user		the MySQL username
+	password	password belonging to user
+	host		the host name of the MySQL database
+	database	name of the database
+	port        the port of the MySQL database, default is 3306
+	tables		comma separated list of tables that need to be inspected
 	sqoop_options	Append verbatim sqoop command line options
-	
+	oozie           Generate the Oozie XML workflow
 
 '''
 
@@ -45,6 +46,7 @@ import math
 
 from docopt import docopt
 from collections import OrderedDict
+import oozie
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
@@ -82,15 +84,16 @@ class Datatype(object):
 		Mysql to Hive Casting
 		'''
 		self.mysql_to_hive = {}
-		self.mysql_to_hive['varbinary'] = 'string'
-		self.mysql_to_hive['binary'] = 'string'
-		self.mysql_to_hive['blob'] = 'string'
+		self.mysql_to_hive['varbinary'] = 'binary'
+		self.mysql_to_hive['binary'] = 'binary'
+		self.mysql_to_hive['blob'] = 'binary'
+		self.mysql_to_hive['tinyblob'] = 'binary'
+		self.mysql_to_hive['mediumblob'] = 'binary'
 		self.mysql_to_hive['timestamp'] = 'timestamp'
 		self.mysql_to_hive['varchar'] = 'string'
 		self.mysql_to_hive['char'] = 'string'
-		self.mysql_to_hive['tinyint'] = 'smallint'
-		self.mysql_to_hive['mediumblob'] = 'string'
-		self.mysql_to_hive['enum'] = 'array'
+		self.mysql_to_hive['tinyint'] = 'smallint'		
+		self.mysql_to_hive['enum'] = 'smallint'
 		
 		
 		self.size = {}
@@ -120,10 +123,11 @@ class Datatype(object):
 			sys.exit(-1)
 
 class Db(object):
-	def __init__(self, user, password, host, database, tables=None, sqoop_options=None):
+	def __init__(self, user, password, host, database, port=3306, tables=None, sqoop_options=None):
 		self.user = user
 		self.password = password
 		self.host = host
+		self.port = port
 		self.database = database
 		self.tables = tables if tables else [] 
 		self.sqoop_options = sqoop_options if sqoop_options != None else ''
@@ -132,8 +136,8 @@ class Db(object):
 		self.blocksize = (1024 ** 3) * 256  # Hardcoded default for now
 		self.schema = OrderedDict()
 		self.verbose = True
-		self.mysql_cmd = ['mysql', '-h', self.host, '-u%s' % self.user, '-p%s' % self.password, self.database]
-		self.sqoop_cmd = 'sqoop import --username %s --password %s --connect jdbc:mysql://%s:3306/%s %s' % (self.user, self.password, self.host, self.database, self.sqoop_options)
+		self.mysql_cmd = ['mysql', '-h%s' % self.host, '-u%s' % self.user, '-p%s' % self.password, '-P%s' % self.port, self.database]
+		self.sqoop_cmd = 'sqoop import --username %s --password %s --connect jdbc:mysql://%s:%s/%s %s' % (self.user, self.password, self.host, self.port, self.database, self.sqoop_options)
 
 	def __str__(self):
 		return '%s@%s:%s' % (self.user, self.host, self.database)
@@ -198,7 +202,8 @@ class Db(object):
 		converter = Datatype()
 		for name, column in self.schema.iteritems():
 			if converter.requires_mysql_cast(column.datatype):
-				part = 'CAST(%s AS %s CHARACTER SET utf8) AS %s' % (name, converter.mysql_to_mysql.get(column.datatype), name)
+				charset = 'CHARACTER SET utf8' if column.datatype.find('binary') == -1 else ''
+				part = 'CAST(%s AS %s %s) AS %s' % (name, converter.mysql_to_mysql.get(column.datatype), charset, name)
 			else:
 				part = name
 			query = ', '.join([query, part])
@@ -237,8 +242,9 @@ class Db(object):
 		split_by = '--split-by %s' % pk
 		query = "--query '%s'" % query
 		mappers = '--num-mappers %s' % mappers
-		target_dir = '--target-dir /tmp/' 
-		sqoop_cmd = ' '.join([self.sqoop_cmd, split_by, mappers, target_dir, query])
+		target_dir = '--target-dir /user/diederik/tmp'
+		hive_commands = '--create-hive-table --hive-table %s_%s --hive-import' % (self.database, table)
+		sqoop_cmd = ' '.join([self.sqoop_cmd, hive_commands, split_by, mappers, target_dir, query])
 		if self.verbose:
 			log.info('Generated sqoop command: %s' % sqoop_cmd)
 		return sqoop_cmd
@@ -248,13 +254,18 @@ def run(args):
 	Given a mysql database name and an optional table, construct a select query 
 	that takes care of casting (var)binary and blob fields to char fields.
 	'''
-	database = Db(args.get('--user'), args.get('--password'), args.get('--host'),
-				args.get('--database'), args.get('--table'), args.get('--target_dir'))
-	if not args.get('--table'):
+	sqoop_options = args.get('--sqoop_options') if args.get('--sqoop_options') != None else ''
+	if sqoop_options.find('target_dir') == -1:
+		log.error('You must specify the --target_dir option as part of your sqoop_options.')
+		sys.exit(-1)
+	database = Db(args.get('<user>'), args.get('<password>'), args.get('<host>'),
+				args.get('<database>'), args.get('--port'), args.get('--tables'), args.get('--target_dir'))
+	if not args.get('--tables'):
 		database.get_tables()
 	else:
 		database.tables = args.get('--tables').split(',')
-		
+	
+	log.inf('Tables found: %s' % (','.join(database.tables))
 	fh = open('sqoop.sh', 'w')
 	log.info('Opening file handle...')
 	for table in database.tables:
@@ -266,15 +277,21 @@ def run(args):
 		sqoop_cmd = database.generate_sqoop_cmd(mappers, query, table)
 		fh.write(sqoop_cmd)
 		fh.write('\n\n')
+		
+		if 'oozie' in args and args.oozie == True:
+			attribs = {}
+			oozie.construct_XML_doc(attribs)
 	fh.close()
 	log.info('Closing filehandle.')
-	log.info('Exit successfully')
+	log.info('Exit successfully, close Sqoopy.')
 
 def main():
 	'Main script entrypoint for CLI.'
+	log.info('Initializing command line parameters.')
 	args = docopt(__doc__)
-	main(args)
+	run(args)
 
 
 if __name__ == '__main__':
+	log.info('Starting sqoopy')
 	main()

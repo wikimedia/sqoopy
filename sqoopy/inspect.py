@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
-Usage: inspect.py [--user=user] [--password=password] [--host=host]
-[--database=database] [--tables=tables]
+Usage: inspect.py <user> <password> <host> <database> [--port=port] [--tables=tables]
 
 Arguments:
     user            the MySQL username
-    host            the host name of the MySQL database
-    database        name of the database
     password        password belonging to user
+    host            the host name of the MySQL database
+    port            the port of the MySQL database, default is 3306
+    database        name of the database
     tables          comma separated list of tables that need to be inspected
     
 '''
@@ -138,8 +138,8 @@ def run(args):
         tables = args.get('--tables').split(',')
     except AttributeError:
         tables = []
-    database = Db(args.get('--user'), args.get('--password'), args.get('--host'),
-                args.get('--database'), tables)
+    database = Db(args.get('<user>'), args.get('<password>'), args.get('<host>'),
+                args.get('<database>'), args.get('--port'), tables)
     
     if not args.get('--tables'):
         database.get_tables()
@@ -154,7 +154,8 @@ def run(args):
 def main():
     'Main script entrypoint for CLI.'
     args = docopt(__doc__)
-    main(args)
+    print args
+    run(args)
 
 
 if __name__ == '__main__':
